@@ -1,5 +1,5 @@
 import { store, newId } from './storage.js';
-import { COUNTRIES, searchCourses, fetchHoles } from './osm.js';
+import { COUNTRIES, listCourses, filterCourses, fetchHoles } from './osm.js';
 import { coursePar, playerSummary } from './golf.js';
 
 const app = document.getElementById('app');
@@ -40,14 +40,14 @@ function coursesView() {
   const courses = store.courses();
   return `
     <header><a href="#/" class="back">‹</a><h1>Kentät</h1></header>
-    <form id="search" class="card">
-      <h2>Hae OpenStreetMapista</h2>
+    <form id="search" class="card" autocomplete="off" onsubmit="return false">
+      <h2>Hae golfkenttä</h2>
       <div class="row">
-        <select name="country">${COUNTRIES.map(c => `<option value="${c.code}">${c.name}</option>`).join('')}</select>
-        <input name="q" placeholder="Kentän nimi, esim. Talma" required minlength="3">
+        <select name="country">${COUNTRIES.map(c => `<option value="${c.code}" ${c.code === current.country ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
+        <input type="search" name="course-filter" id="courseFilter" placeholder="Suodata, esim. Tuusula"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
       </div>
-      <button class="btn primary">Hae</button>
-      <div id="results"></div>
+      <div id="results"><p class="muted">Ladataan kenttiä…</p></div>
     </form>
     <a class="btn" href="#/course/new">Lisää kenttä käsin</a>
     <h2>Tallennetut kentät</h2>
@@ -130,6 +130,31 @@ function teeOptions(course) {
   return course.tees.map((t, i) => `<option value="${i}">${esc(t.name || `Tii ${i + 1}`)}${t.slope ? ` (CR ${t.rating}, slope ${t.slope})` : ''}</option>`).join('');
 }
 
+async function loadCourseList() {
+  const out = document.getElementById('results');
+  if (!out) return;
+  const country = current.country || 'FI';
+  out.innerHTML = '<p class="muted">Ladataan kenttiä…</p>';
+  try {
+    current.courseList = await listCourses(country);
+    if (current.country === country) showResults();
+  } catch (err) {
+    out.innerHTML = `<p class="error">${esc(err.message)}</p><button type="button" class="btn" data-action="retry-list">Yritä uudelleen</button>`;
+  }
+}
+
+function showResults() {
+  const out = document.getElementById('results');
+  const input = document.getElementById('courseFilter');
+  if (!out || !current.courseList) return;
+  const all = filterCourses(current.courseList, input?.value || '');
+  current.results = all.slice(0, 50);
+  out.innerHTML = current.results.length
+    ? `<ul class="list">${current.results.map((r, i) => `<li><button type="button" class="link" data-action="import" data-i="${i}">${esc(r.name)}${r.city ? ` <span class="muted small">${esc(r.city)}</span>` : ''}</button></li>`).join('')}</ul>
+       ${all.length > 50 ? `<p class="muted small">${all.length} kenttää, tarkenna hakua.</p>` : ''}`
+    : '<p class="muted">Ei osumia. Voit lisätä kentän käsin.</p>';
+}
+
 function roundContext(round) {
   const course = store.course(round.courseId);
   if (!course) return null;
@@ -208,13 +233,17 @@ function cardView(round) {
 
 // ---------- Reititys ----------
 
-let current = {};
+let current = { country: 'FI' };
 
 function render() {
   const parts = location.hash.replace(/^#\/?/, '').split('/');
-  current = { parts };
+  current = { parts, country: current.country };
   const [a, b, c] = parts;
-  if (a === 'courses') app.innerHTML = coursesView();
+  if (a === 'courses') {
+    current.country = current.country || 'FI';
+    app.innerHTML = coursesView();
+    loadCourseList();
+  }
   else if (a === 'course') {
     const course = b === 'new'
       ? { id: newId(), name: '', country: 'FI', holes: emptyHoles(18), tees: [], source: 'manual' }
@@ -243,6 +272,11 @@ function updateTees() {
 
 app.addEventListener('change', e => {
   if (e.target.id === 'courseSelect') updateTees();
+  if (e.target.name === 'country' && e.target.form?.id === 'search') {
+    current.country = e.target.value;
+    current.courseList = null;
+    loadCourseList();
+  }
   if (e.target.name === 'count' && current.course) {
     const course = readCourseForm(e.target.form);
     const n = Number(e.target.value);
@@ -270,23 +304,13 @@ function readCourseForm(form) {
   return course;
 }
 
+app.addEventListener('input', e => {
+  if (e.target.id === 'courseFilter') showResults();
+});
+
 app.addEventListener('submit', async e => {
   e.preventDefault();
   const form = e.target;
-  if (form.id === 'search') {
-    const f = new FormData(form);
-    const out = form.querySelector('#results');
-    out.innerHTML = '<p class="muted">Haetaan…</p>';
-    try {
-      const results = await searchCourses(f.get('q').trim(), f.get('country'));
-      current.results = results;
-      out.innerHTML = results.length
-        ? `<ul class="list">${results.map((r, i) => `<li><button type="button" class="link" data-action="import" data-i="${i}">${esc(r.name)}</button></li>`).join('')}</ul>`
-        : '<p class="muted">Ei osumia. Voit lisätä kentän käsin.</p>';
-    } catch (err) {
-      out.innerHTML = `<p class="error">${esc(err.message)}</p>`;
-    }
-  }
   if (form.id === 'course') {
     const course = readCourseForm(form);
     store.saveCourse(course);
@@ -328,6 +352,7 @@ app.addEventListener('click', async e => {
       el.textContent = `${r.name} – ${err.message}`;
     }
   }
+  if (action === 'retry-list') loadCourseList();
   if (action === 'add-tee') {
     const box = document.getElementById('tees');
     box.insertAdjacentHTML('beforeend', teeRow({}, box.children.length));

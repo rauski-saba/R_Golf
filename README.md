@@ -23,7 +23,7 @@ python3 -m http.server 8000
 Testit (Node 18+):
 
 ```sh
-node --test tests/
+node --test tests/*.test.mjs
 ```
 
 ## Kenttädata

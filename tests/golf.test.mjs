@@ -71,3 +71,16 @@ test('OSM-väylien normalisointi', () => {
     { number: 2, par: 3, handicap: 17 },
   ]);
 });
+
+test('kenttähaku sanojen alkujen perusteella', async () => {
+  const { filterCourses, normalize } = await import('../js/osm.js');
+  const list = [
+    { name: 'Tuusulan Golfklubi', search: normalize('Tuusulan Golfklubi Tuusula') },
+    { name: 'Talma Golf', search: normalize('Talma Golf Sipoo') },
+    { name: 'Gloria Golf', search: normalize('Gloria Golf Belek') },
+  ];
+  assert.deepEqual(filterCourses(list, 'Tuusula Golf').map(c => c.name), ['Tuusulan Golfklubi']);
+  assert.deepEqual(filterCourses(list, 'sipoo').map(c => c.name), ['Talma Golf']);
+  assert.equal(filterCourses(list, '').length, 3);
+  assert.equal(filterCourses(list, 'olf').length, 0);
+});

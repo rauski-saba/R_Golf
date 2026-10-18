@@ -1,0 +1,11 @@
+{
+  "name": "R_Golf",
+  "short_name": "R_Golf",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f3",
+  "theme_color": "#1f6f43",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

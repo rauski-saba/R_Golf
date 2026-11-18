@@ -1,6 +1,9 @@
 import { store, newId } from './storage.js';
 import { COUNTRIES, listCourses, filterCourses, fetchHoles } from './osm.js';
-import { coursePar, playerSummary } from './golf.js';
+import { coursePar, playerSummary, pointsSummary, holePoints, hasFairway } from './golf.js';
+import { PRESET_COURSES } from './presets.js';
+import { GAMES, getEntry, setEntry, playerEntries, playerScores, flights, migrateRound } from './round.js';
+import { syncEnabled, syncAll, shareRound, joinRound, pendingCount } from './sync.js';
 
 const app = document.getElementById('app');
 let draftCourse = null; // OSM:stä tuotu kenttä, jota ei ole vielä tallennettu
@@ -24,16 +27,28 @@ function homeView() {
     <header><h1>R_Golf</h1></header>
     <div class="actions">
       <a class="btn primary" href="#/round/new">Uusi kierros</a>
+      ${syncEnabled() ? '<a class="btn" href="#/join">Liity kierrokseen</a>' : ''}
       <a class="btn" href="#/courses">Kentät</a>
     </div>
     <h2>Kierrokset</h2>
-    ${rounds.length ? `<ul class="list">${rounds.map(r => {
-      const c = store.course(r.courseId);
-      return `<li><a href="#/round/${r.id}">
-        <strong>${esc(c?.name || 'Poistettu kenttä')}</strong>
-        <span class="muted">${fmtDate(r.date)} · ${r.players.map(p => esc(p.name)).join(', ')}</span>
-      </a></li>`;
-    }).join('')}</ul>` : '<p class="muted">Ei vielä kierroksia.</p>'}`;
+    ${rounds.length ? `<ul class="list">${rounds.map(r => `<li><a href="#/round/${r.id}">
+        <strong>${esc(r.course?.name || 'Poistettu kenttä')}</strong>
+        <span class="muted">${fmtDate(r.date)} · ${GAMES[r.game] || ''}${r.code ? ' · jaettu' : ''} · ${r.players.map(p => esc(p.name)).join(', ')}</span>
+      </a></li>`).join('')}</ul>` : '<p class="muted">Ei vielä kierroksia.</p>'}`;
+}
+
+function joinView() {
+  return `
+    <header><a href="#/" class="back">‹</a><h1>Liity kierrokseen</h1></header>
+    <form id="join" class="card" autocomplete="off">
+      <label>Kierroksen koodi
+        <input name="code" required maxlength="6" placeholder="esim. K7M4QX" autocapitalize="characters" autocorrect="off" spellcheck="false"
+          style="text-transform:uppercase; letter-spacing:.15em; font-size:1.3rem">
+      </label>
+      <p class="muted small">Koodin saa kierroksen aloittajalta. Liittymiseen tarvitaan verkkoyhteys, sen jälkeen kirjaus toimii myös ilman.</p>
+      <button class="btn primary">Liity</button>
+      <p id="joinMsg" class="error"></p>
+    </form>`;
 }
 
 function coursesView() {
@@ -71,6 +86,7 @@ function courseEditView(course) {
         ${![9, 18].includes(course.holes.length) ? `<option selected>${course.holes.length}</option>` : ''}</select>
       </label>
       ${course.source === 'osm' ? `<p class="muted small">Tuotu OpenStreetMapista. Tarkista par ja väylähcp tuloskortista.</p>` : ''}
+      ${course.source === 'preset' ? `<p class="muted small">Valmiiksi syötetty kenttä. Tarkista tiedot paikallisesta tuloskortista.</p>` : ''}
       <table class="holes">
         <thead><tr><th>Väylä</th><th>Par</th><th>Hcp</th></tr></thead>
         <tbody>${course.holes.map((h, i) => `
@@ -108,20 +124,29 @@ function newRoundView() {
   return `
     <header><a href="#/" class="back">‹</a><h1>Uusi kierros</h1></header>
     <form id="round" class="card">
+      <label>Peli <select name="game" id="gameSelect">${Object.entries(GAMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+      <p class="muted small" id="gameInfo">${GAME_INFO.points}</p>
       <label>Kenttä <select name="course" id="courseSelect">${courses.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
       <label>Tii <select name="tee" id="teeSelect"></select></label>
       <label>Päivä <input type="date" name="date" value="${today()}" required></label>
       <h2>Pelaajat</h2>
-      <div id="players">${playerRow(0)}</div>
+      <p class="muted small">Flight = samassa ryhmässä pelaavat. Kirjaaja voi näyttää vain oman flightinsa pelaajat.</p>
+      <div id="players" class="game-points">${playerRow(0)}</div>
       <button type="button" class="btn" data-action="add-player">+ Lisää pelaaja</button>
       <button class="btn primary">Aloita kierros</button>
     </form>`;
 }
 
+const GAME_INFO = {
+  points: 'Ei tasoituksia. Väyläosuma 1 p (ei par 3:lla), green (GIR) 1 p, hole in one 4 p, eagle 3 p, birdie 2 p, par 1 p.',
+  stableford: 'Pistebogey tasoituksilla (WHS).',
+};
+
 function playerRow(i) {
   return `<div class="row player">
     <input name="pname${i}" placeholder="Nimi" required>
-    <input name="phcp${i}" type="number" step="0.1" inputmode="decimal" placeholder="Tasoitus" required>
+    <input name="phcp${i}" class="hcp" type="number" step="0.1" inputmode="decimal" placeholder="Tasoitus">
+    <select name="pflight${i}" class="flight" aria-label="Flight">${[1, 2, 3, 4].map(n => `<option value="${n}">Flight ${n}</option>`).join('')}</select>
   </div>`;
 }
 
@@ -156,37 +181,78 @@ function showResults() {
 }
 
 function roundContext(round) {
-  const course = store.course(round.courseId);
+  const course = round.course;
   if (!course) return null;
-  const tee = course.tees[round.tee] || {};
-  return { course, tee, summaries: round.players.map(p => playerSummary(p, course.holes, tee)) };
+  const tee = round.teeData || {};
+  const n = course.holes.length;
+  const summaries = round.players.map(p => round.game === 'points'
+    ? pointsSummary(playerEntries(round, p.id, n), course.holes)
+    : playerSummary({ hcp: p.hcp, scores: playerScores(round, p.id, n) }, course.holes, tee));
+  return { course, tee, summaries };
+}
+
+// Kirjaajan valitsema flight muistetaan kierroskohtaisesti tässä puhelimessa.
+const flightKey = id => `rgolf.flight.${id}`;
+const myFlight = round => Number(localStorage.getItem(flightKey(round.id))) || 0;
+
+function syncBar(round) {
+  if (!syncEnabled()) return '';
+  if (!round.code) {
+    return `<div class="sync"><button class="btn" data-action="share">Jaa ryhmälle</button>
+      <span class="muted small">Muut liittyvät koodilla ja näkevät tulokset.</span></div>`;
+  }
+  const pending = pendingCount(round);
+  const status = !navigator.onLine
+    ? `Ei yhteyttä${pending ? ` · ${pending} odottaa` : ''}`
+    : pending ? 'Lähetetään…'
+    : round.syncedAt ? `Synkronoitu ${new Date(round.syncedAt).toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })}` : '';
+  return `<div class="sync"><span>Koodi <strong class="code">${esc(round.code)}</strong></span>
+    <span class="muted small ${!navigator.onLine ? 'offline' : ''}">${status}</span></div>`;
 }
 
 function holeView(round, idx) {
   const ctx = roundContext(round);
-  if (!ctx) return `<p>Kenttä on poistettu.</p><a class="btn" href="#/">Etusivulle</a>`;
+  if (!ctx) return `<p>Kentän tiedot puuttuvat.</p><a class="btn" href="#/">Etusivulle</a>`;
   const { course, summaries } = ctx;
   const hole = course.holes[idx];
   const last = idx === course.holes.length - 1;
+  const points = round.game === 'points';
+  const fl = flights(round);
+  const mine = myFlight(round);
+  const shown = round.players.map((p, pi) => ({ p, pi })).filter(({ p }) => !mine || (p.flight || 1) === mine);
   return `
     <header><a href="#/" class="back">‹</a><h1>${esc(course.name)}</h1></header>
+    ${syncBar(round)}
+    ${fl.length > 1 ? `<div class="flights">
+      <button class="chip ${!mine ? 'on' : ''}" data-action="flight" data-f="0">Kaikki</button>
+      ${fl.map(f => `<button class="chip ${mine === f ? 'on' : ''}" data-action="flight" data-f="${f}">Flight ${f}</button>`).join('')}
+    </div>` : ''}
     <div class="hole-head">
       <div class="big">Väylä ${hole.number}</div>
       <div class="muted">Par ${hole.par}${hole.handicap ? ` · Hcp ${hole.handicap}` : ''}</div>
     </div>
-    ${round.players.map((p, pi) => {
-      const s = p.scores[idx];
-      const recv = summaries[pi].received[idx];
+    ${shown.map(({ p, pi }) => {
+      const e = getEntry(round, p.id, idx) || {};
+      const sum = summaries[pi];
+      const info = points
+        ? `${holePoints(e, hole.par)} p tältä · ${sum.points} p yht.`
+        : (() => { const recv = sum.received[idx]; return `${recv ? `${recv > 0 ? '+' : ''}${recv} lyöntiä · ` : ''}${sum.points} p`; })();
       return `<div class="card player-score">
-        <div>
-          <strong>${esc(p.name)}</strong>
-          <div class="muted small">${recv ? `${recv > 0 ? '+' : ''}${recv} lyöntiä · ` : ''}${summaries[pi].points} p</div>
+        <div class="player-top">
+          <div>
+            <strong>${esc(p.name)}</strong>
+            <div class="muted small">${info}</div>
+          </div>
+          <div class="stepper">
+            <button class="btn round" data-action="dec" data-p="${pi}" aria-label="Vähemmän">−</button>
+            <span class="score">${e.s ?? '–'}</span>
+            <button class="btn round" data-action="inc" data-p="${pi}" aria-label="Enemmän">+</button>
+          </div>
         </div>
-        <div class="stepper">
-          <button class="btn round" data-action="dec" data-p="${pi}">−</button>
-          <span class="score">${s ?? '–'}</span>
-          <button class="btn round" data-action="inc" data-p="${pi}">+</button>
-        </div>
+        ${points ? `<div class="toggles">
+          ${hasFairway(hole.par) ? `<button class="toggle ${e.f ? 'on' : ''}" data-action="fw" data-p="${pi}" aria-pressed="${!!e.f}">Väylä</button>` : ''}
+          <button class="toggle ${e.g ? 'on' : ''}" data-action="gir" data-p="${pi}" aria-pressed="${!!e.g}">Green (GIR)</button>
+        </div>` : ''}
       </div>`;
     }).join('')}
     <div class="actions nav">
@@ -194,40 +260,55 @@ function holeView(round, idx) {
       ${last ? `<a class="btn primary" href="#/round/${round.id}/card">Tuloskortti</a>`
              : `<button class="btn primary" data-action="next">Seuraava ›</button>`}
     </div>
-    <div class="dots">${course.holes.map((h, i) => `<button class="dot ${i === idx ? 'on' : ''} ${round.players.every(p => p.scores[i] != null) ? 'done' : ''}" data-action="goto" data-i="${i}">${h.number}</button>`).join('')}</div>
+    <div class="dots">${course.holes.map((h, i) => `<button class="dot ${i === idx ? 'on' : ''} ${shown.every(({ p }) => getEntry(round, p.id, i)?.s != null) ? 'done' : ''}" data-action="goto" data-i="${i}">${h.number}</button>`).join('')}</div>
     <a class="btn" href="#/round/${round.id}/card">Näytä tuloskortti</a>`;
 }
 
+const toParText = n => n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`;
+
 function cardView(round) {
   const ctx = roundContext(round);
-  if (!ctx) return `<p>Kenttä on poistettu.</p>`;
+  if (!ctx) return `<p>Kentän tiedot puuttuvat.</p>`;
   const { course, tee, summaries } = ctx;
+  const points = round.game === 'points';
+  const n = course.holes.length;
+  const ranked = round.players.map((p, pi) => ({ p, s: summaries[pi] }))
+    .sort((a, b) => points ? b.s.points - a.s.points || a.s.gross - b.s.gross : b.s.points - a.s.points);
   return `
     <header><a href="#/round/${round.id}" class="back">‹</a><h1>Tuloskortti</h1></header>
-    <p class="muted">${esc(course.name)} · ${fmtDate(round.date)}${tee.name ? ` · tii ${esc(tee.name)}` : ''}</p>
+    ${syncBar(round)}
+    <p class="muted">${esc(course.name)} · ${fmtDate(round.date)} · ${GAMES[round.game]}${tee.name ? ` · tii ${esc(tee.name)}` : ''}</p>
+    ${points ? `
+    <table class="summary">
+      <thead><tr><th>Pelaaja</th><th>Points</th><th>Lyönnit</th><th>+/−</th><th>Väylät</th><th>GIR</th></tr></thead>
+      <tbody>${ranked.map(({ p, s }) => `<tr><td>${esc(p.name)}</td><td><strong>${s.points}</strong></td><td>${s.gross || '–'}</td>
+        <td>${s.played ? toParText(s.toPar) : '–'}</td><td>${s.fairways}/${s.fairwayHoles}</td><td>${s.greens}/${n}</td></tr>`).join('')}
+      </tbody>
+    </table>` : ''}
     <div class="scroll"><table class="card-table">
       <thead><tr><th>Väylä</th>${course.holes.map(h => `<th>${h.number}</th>`).join('')}<th>Yht.</th></tr>
       <tr class="muted"><td>Par</td>${course.holes.map(h => `<td>${h.par}</td>`).join('')}<td>${coursePar(course.holes)}</td></tr></thead>
-      <tbody>${round.players.map((p, pi) => `
-        <tr><th>${esc(p.name)}</th>${course.holes.map((h, i) => {
-          const s = p.scores[i];
+      <tbody>${round.players.map((p, pi) => {
+        const es = playerEntries(round, p.id, n);
+        return `<tr><th>${esc(p.name)}</th>${course.holes.map((h, i) => {
+          const s = es[i]?.s;
           const cls = s == null ? '' : s < h.par ? 'under' : s > h.par ? 'over' : '';
           return `<td class="${cls}">${s ?? ''}</td>`;
-        }).join('')}<td><strong>${summaries[pi].gross}</strong></td></tr>`).join('')}
+        }).join('')}<td><strong>${summaries[pi].gross}</strong></td></tr>
+        ${points ? `<tr class="pts"><td>pist.</td>${course.holes.map((h, i) => `<td>${es[i] ? holePoints(es[i], h.par) : ''}</td>`).join('')}<td>${summaries[pi].points}</td></tr>` : ''}`;
+      }).join('')}
       </tbody>
     </table></div>
+    ${!points ? `
     <table class="summary">
       <thead><tr><th>Pelaaja</th><th>Pelitas.</th><th>Lyönnit</th><th>Netto</th><th>Pisteet</th></tr></thead>
-      <tbody>${round.players
-        .map((p, pi) => ({ p, s: summaries[pi] }))
-        .sort((a, b) => b.s.points - a.s.points)
-        .map(({ p, s }) => `<tr><td>${esc(p.name)}</td><td>${s.courseHcp}</td><td>${s.gross}</td><td>${s.net ?? '–'}</td><td><strong>${s.points}</strong></td></tr>`).join('')}
+      <tbody>${ranked.map(({ p, s }) => `<tr><td>${esc(p.name)}</td><td>${s.courseHcp}</td><td>${s.gross}</td><td>${s.net ?? '–'}</td><td><strong>${s.points}</strong></td></tr>`).join('')}
       </tbody>
     </table>
-    ${!tee.slope ? '<p class="muted small">Tiille ei ole slopea ja CR:ää, joten pelitasoitus on arvio.</p>' : ''}
+    ${!tee.slope ? '<p class="muted small">Tiille ei ole slopea ja CR:ää, joten pelitasoitus on arvio.</p>' : ''}` : ''}
     <div class="actions">
       <a class="btn" href="#/round/${round.id}">Muokkaa tuloksia</a>
-      <button class="btn danger" data-action="delete-round">Poista kierros</button>
+      <button class="btn danger" data-action="delete-round">${round.code ? 'Poista puhelimesta' : 'Poista kierros'}</button>
     </div>`;
 }
 
@@ -251,6 +332,8 @@ function render() {
     if (!course) return go('#/courses');
     current.course = course;
     app.innerHTML = courseEditView(course);
+  } else if (a === 'join') {
+    app.innerHTML = joinView();
   } else if (a === 'round' && b === 'new') {
     app.innerHTML = newRoundView();
     updateTees();
@@ -272,6 +355,10 @@ function updateTees() {
 
 app.addEventListener('change', e => {
   if (e.target.id === 'courseSelect') updateTees();
+  if (e.target.id === 'gameSelect') {
+    document.getElementById('gameInfo').textContent = GAME_INFO[e.target.value];
+    document.getElementById('players').className = `game-${e.target.value}`;
+  }
   if (e.target.name === 'country' && e.target.form?.id === 'search') {
     current.country = e.target.value;
     current.courseList = null;
@@ -320,13 +407,35 @@ app.addEventListener('submit', async e => {
   if (form.id === 'round') {
     const f = new FormData(form);
     const course = store.course(f.get('course'));
+    const game = f.get('game');
     const players = [];
     for (let i = 0; f.has(`pname${i}`); i++) {
-      players.push({ name: f.get(`pname${i}`).trim(), hcp: Number(f.get(`phcp${i}`)), scores: course.holes.map(() => null) });
+      const hcp = f.get(`phcp${i}`);
+      players.push({ id: `p${i + 1}`, name: f.get(`pname${i}`).trim(), hcp: hcp === '' ? null : Number(hcp), flight: Number(f.get(`pflight${i}`)) || 1 });
     }
-    const round = { id: newId(), courseId: course.id, tee: Number(f.get('tee')), date: f.get('date'), players, currentHole: 0 };
+    if (game === 'stableford' && players.some(p => p.hcp == null)) {
+      alert('Pistebogeyssa jokaiselle pelaajalle tarvitaan tasoitus.');
+      return;
+    }
+    const round = {
+      id: newId(), game, date: f.get('date'), players, entries: {}, currentHole: 0, t: Date.now(),
+      course: { id: course.id, name: course.name, country: course.country, holes: course.holes },
+      teeData: course.tees[Number(f.get('tee'))] || null,
+    };
     store.saveRound(round);
     go(`#/round/${round.id}`);
+  }
+  if (form.id === 'join') {
+    const msg = document.getElementById('joinMsg');
+    const btn = form.querySelector('button');
+    btn.disabled = true; msg.textContent = '';
+    try {
+      const round = await joinRound(new FormData(form).get('code'));
+      go(`#/round/${round.id}`);
+    } catch (err) {
+      msg.textContent = navigator.onLine ? err.message : 'Liittymiseen tarvitaan verkkoyhteys.';
+      btn.disabled = false;
+    }
   }
 });
 
@@ -370,24 +479,68 @@ app.addEventListener('click', async e => {
     go('#/');
   }
   if (!round) return;
-  const course = store.course(round.courseId);
+  const course = round.course;
   const idx = round.currentHole || 0;
-  if (action === 'inc' || action === 'dec') {
-    const p = round.players[Number(el.dataset.p)];
-    const s = p.scores[idx];
-    if (action === 'inc') p.scores[idx] = s == null ? course.holes[idx].par : s + 1;
-    else p.scores[idx] = s == null ? course.holes[idx].par - 1 : s > 1 ? s - 1 : null;
+  const pi = Number(el.dataset.p);
+  const p = round.players[pi];
+  if (action === 'share') {
+    el.disabled = true;
+    shareRound(round).catch(() => {}).finally(render);
+    return;
+  }
+  if (action === 'flight') {
+    localStorage.setItem(`rgolf.flight.${round.id}`, el.dataset.f);
+    render();
+    return;
+  }
+  const edit = ['inc', 'dec', 'fw', 'gir'].includes(action);
+  if (edit) {
+    const e = getEntry(round, p.id, idx) || {};
+    const par = course.holes[idx].par;
+    if (action === 'inc') setEntry(round, p.id, idx, { s: e.s == null ? par : e.s + 1 });
+    if (action === 'dec') setEntry(round, p.id, idx, { s: e.s == null ? par - 1 : e.s > 1 ? e.s - 1 : null });
+    if (action === 'fw') setEntry(round, p.id, idx, { f: !e.f });
+    if (action === 'gir') setEntry(round, p.id, idx, { g: !e.g });
   }
   if (action === 'next') round.currentHole = Math.min(idx + 1, course.holes.length - 1);
   if (action === 'prev') round.currentHole = Math.max(idx - 1, 0);
   if (action === 'goto') round.currentHole = Number(el.dataset.i);
-  if (['inc', 'dec', 'next', 'prev', 'goto'].includes(action)) {
+  if (edit || ['next', 'prev', 'goto'].includes(action)) {
     store.saveRound(round);
     render();
+    if (edit) scheduleSync();
   }
 });
 
+// ---------- Synkronointi ----------
+
+let syncTimer = null;
+function scheduleSync(delay = 1500) {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(runSync, delay);
+}
+
+async function runSync() {
+  if (!syncEnabled()) return;
+  const changed = await syncAll().catch(() => false);
+  // Kierrosnäkymä päivitetään aina (muiden tulokset ja synkronoinnin tila).
+  // Lomakkeita ei piirretä uudelleen, ettei kesken oleva syöttö katoa.
+  const [a, b] = current.parts || [];
+  if ((a === 'round' && b && b !== 'new') || (!a && changed)) render();
+}
+
+if (syncEnabled()) {
+  window.addEventListener('online', () => scheduleSync(0));
+  window.addEventListener('offline', () => render());
+  // Jaetulla kierroksella haetaan muiden tulokset 15 sekunnin välein, kun sovellus on auki.
+  setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine) runSync(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleSync(0); });
+}
+
 window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+store.seedPresets(PRESET_COURSES);
+store.migrateRounds(r => migrateRound(r, id => store.course(id)));
 render();
+scheduleSync(0);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

@@ -45,4 +45,26 @@ export const store = {
     db.rounds = db.rounds.filter(r => r.id !== id);
     save(db);
   },
+  // Muuntaa vanhat kierrokset nykyiseen muotoon.
+  migrateRounds(fn) {
+    const db = load();
+    if (!db.rounds.some(r => !r.entries || !r.course)) return;
+    db.rounds = db.rounds.map(r => (r.entries && r.course ? r : fn(r)));
+    save(db);
+  },
+  // Lisää valmiit kentät kerran. Jos käyttäjä poistaa tai muokkaa kenttää, sitä ei palauteta.
+  seedPresets(presets) {
+    const SEEDED = 'rgolf.presets';
+    let seeded;
+    try { seeded = JSON.parse(localStorage.getItem(SEEDED)) || []; } catch { seeded = []; }
+    const db = load();
+    let changed = false;
+    for (const c of presets) {
+      if (seeded.includes(c.id)) continue;
+      if (!db.courses.some(x => x.id === c.id)) { db.courses.push(structuredClone(c)); changed = true; }
+      seeded.push(c.id);
+    }
+    if (changed) save(db);
+    localStorage.setItem(SEEDED, JSON.stringify(seeded));
+  },
 };

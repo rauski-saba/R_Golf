@@ -96,7 +96,7 @@ th, td { padding: 6px; text-align: center; border-bottom: 1px solid var(--border
 
 .hole-head { text-align: center; margin: 8px 0 4px; }
 .big { font-size: 2rem; font-weight: 700; }
-.player-score { display: flex; align-items: center; justify-content: space-between; }
+.player-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stepper { display: flex; align-items: center; gap: 12px; }
 .score { font-size: 1.8rem; font-weight: 700; min-width: 2ch; text-align: center; }
 .nav .btn { flex: 1; }
@@ -108,3 +108,29 @@ th, td { padding: 6px; text-align: center; border-bottom: 1px solid var(--border
 }
 .dot.done { color: var(--text); border-color: var(--accent); }
 .dot.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+/* Points-peli */
+.toggles { display: flex; gap: 8px; margin-top: 12px; }
+.toggle {
+  flex: 1; min-height: 44px;
+  font: inherit; font-weight: 600;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--muted); cursor: pointer;
+}
+.toggle.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.toggle.on::before { content: "✓ "; }
+.card-table tr.pts td { color: var(--muted); font-size: .8rem; border-bottom-width: 2px; }
+.game-points .hcp { display: none; }
+.row.player .flight { flex: 0 0 auto; width: auto; }
+
+/* Flightit ja synkronointi */
+.flights { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.chip {
+  font: inherit; font-size: .9rem; padding: 6px 12px; min-height: 36px;
+  border-radius: 18px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.sync { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.code { letter-spacing: .12em; font-size: 1.1rem; }
+.offline { color: var(--danger); }

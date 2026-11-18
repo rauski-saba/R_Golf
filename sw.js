@@ -1,7 +1,8 @@
 // Välimuisti, jotta sovellus aukeaa kentällä myös heikolla yhteydellä.
-const CACHE = 'rgolf-v2';
+const CACHE = 'rgolf-v4';
 const FILES = ['./', 'index.html', 'style.css', 'manifest.webmanifest', 'icon.svg',
-  'js/app.js', 'js/golf.js', 'js/osm.js', 'js/storage.js'];
+  'js/app.js', 'js/golf.js', 'js/osm.js', 'js/storage.js', 'js/presets.js',
+  'js/round.js', 'js/sync.js', 'js/config.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));

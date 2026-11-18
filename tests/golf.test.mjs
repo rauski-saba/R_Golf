@@ -84,3 +84,69 @@ test('kenttähaku sanojen alkujen perusteella', async () => {
   assert.equal(filterCourses(list, '').length, 3);
   assert.equal(filterCourses(list, 'olf').length, 0);
 });
+
+import { PRESET_COURSES } from '../js/presets.js';
+import { coursePar } from '../js/golf.js';
+
+test('valmiiden kenttien tiedot ovat eheät', () => {
+  const expectedPar = { 'preset-el-kantaoui-sea': 73, 'preset-el-kantaoui-panorama': 72 };
+  for (const c of PRESET_COURSES) {
+    assert.equal(c.holes.length, 18, c.name);
+    assert.equal(coursePar(c.holes), expectedPar[c.id], c.name);
+    // Väylähcp:t 1–18, jokainen kerran
+    assert.deepEqual(c.holes.map(h => h.handicap).sort((a, b) => a - b), Array.from({ length: 18 }, (_, i) => i + 1), c.name);
+    assert.ok(c.tees.every(t => t.rating && t.slope), c.name);
+  }
+});
+
+import { resultPoints, holePoints, pointsSummary } from '../js/golf.js';
+
+test('Points: tuloksen pisteet', () => {
+  assert.equal(resultPoints(1, 3), 4);  // hole in one
+  assert.equal(resultPoints(3, 5), 3);  // eagle
+  assert.equal(resultPoints(2, 5), 3);  // albatrossi = eagle tai parempi
+  assert.equal(resultPoints(3, 4), 2);  // birdie
+  assert.equal(resultPoints(4, 4), 1);  // par
+  assert.equal(resultPoints(5, 4), 0);  // bogey
+  assert.equal(resultPoints(null, 4), 0);
+});
+
+test('Points: par 3 -väylällä ei väyläpistettä', () => {
+  assert.equal(holePoints({ s: 3, f: true, g: true }, 3), 2);   // GIR + par
+  assert.equal(holePoints({ s: 4, f: true, g: true }, 4), 3);   // väylä + GIR + par
+  assert.equal(holePoints({ s: 1, f: false, g: true }, 3), 5);  // HIO + GIR
+  assert.equal(holePoints({ s: null, f: true, g: false }, 5), 1); // väylä merkitty, tulos puuttuu
+});
+
+test('Points: yhteenveto', () => {
+  const holes = [{ par: 4 }, { par: 3 }, { par: 5 }];
+  const s = pointsSummary([{ s: 4, f: true, g: true }, { s: 4, g: false }, { s: 4, f: true, g: true }], holes);
+  assert.equal(s.points, 3 + 0 + 4);
+  assert.equal(s.gross, 12);
+  assert.equal(s.toPar, 0);
+  assert.equal(s.fairways, 2);
+  assert.equal(s.fairwayHoles, 2);
+  assert.equal(s.greens, 2);
+  assert.ok(s.complete);
+});
+
+import { setEntry, getEntry, migrateRound, playerScores } from '../js/round.js';
+
+test('merkinnän aikaleima kasvaa ja merkintä on lähettämätön', () => {
+  const r = { entries: {} };
+  const a = setEntry(r, 'p1', 0, { s: 4 }, 1000);
+  const b = setEntry(r, 'p1', 0, { f: true }, 900); // kello jäljessä
+  assert.equal(a.t, 1000);
+  assert.equal(b.t, 1001);
+  assert.deepEqual(getEntry(r, 'p1', 0), { s: 4, f: true, g: false, t: 1001, d: true });
+});
+
+test('vanhan kierroksen muunnos', () => {
+  const course = { id: 'c', name: 'K', holes: [{ par: 4 }, { par: 3 }], tees: [{ name: 'Kelt', rating: 70, slope: 120 }] };
+  const r = migrateRound({ id: 'r', courseId: 'c', tee: 0, players: [{ name: 'A', hcp: 10, scores: [5, null] }] }, () => course);
+  assert.equal(r.game, 'stableford');
+  assert.equal(r.course.name, 'K');
+  assert.equal(r.teeData.slope, 120);
+  assert.equal(r.players[0].id, 'p1');
+  assert.deepEqual(playerScores(r, 'p1', 2), [5, null]);
+});

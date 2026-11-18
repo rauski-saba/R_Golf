@@ -47,4 +47,7 @@ create policy games_rw on games for all to anon using (true) with check (true);
 drop policy if exists entries_rw on entries;
 create policy entries_rw on entries for all to anon using (true) with check (true);
 
+-- Uusissa Supabase-projekteissa tauluille pitää antaa oikeudet erikseen.
+grant usage on schema public to anon;
+grant select, insert, update on games, entries to anon;
 revoke delete on games, entries from anon;

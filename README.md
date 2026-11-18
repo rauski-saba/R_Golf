@@ -10,8 +10,9 @@ Ei tasoituksia. Pisteet väylittäin lasketaan yhteen:
 |---|---|
 | Väyläosuma (ei par 3 -väylillä) | 1 |
 | Green (GIR) | 1 |
-| Hole in one | 4 |
-| Eagle tai parempi | 3 |
+| Hole in one | 5 |
+| Albatrossi | 4 |
+| Eagle | 3 |
 | Birdie | 2 |
 | Par | 1 |
 

@@ -138,7 +138,7 @@ function newRoundView() {
 }
 
 const GAME_INFO = {
-  points: 'Ei tasoituksia. Väyläosuma 1 p (ei par 3:lla), green (GIR) 1 p, hole in one 4 p, eagle 3 p, birdie 2 p, par 1 p.',
+  points: 'Ei tasoituksia. Väyläosuma 1 p (ei par 3:lla), green (GIR) 1 p, hole in one 5 p, albatrossi 4 p, eagle 3 p, birdie 2 p, par 1 p.',
   stableford: 'Pistebogey tasoituksilla (WHS).',
 };
 

@@ -102,9 +102,10 @@ test('valmiiden kenttien tiedot ovat eheät', () => {
 import { resultPoints, holePoints, pointsSummary } from '../js/golf.js';
 
 test('Points: tuloksen pisteet', () => {
-  assert.equal(resultPoints(1, 3), 4);  // hole in one
+  assert.equal(resultPoints(1, 3), 5);  // hole in one
+  assert.equal(resultPoints(1, 4), 5);  // hole in one par 4:llä
   assert.equal(resultPoints(3, 5), 3);  // eagle
-  assert.equal(resultPoints(2, 5), 3);  // albatrossi = eagle tai parempi
+  assert.equal(resultPoints(2, 5), 4);  // albatrossi
   assert.equal(resultPoints(3, 4), 2);  // birdie
   assert.equal(resultPoints(4, 4), 1);  // par
   assert.equal(resultPoints(5, 4), 0);  // bogey
@@ -114,7 +115,7 @@ test('Points: tuloksen pisteet', () => {
 test('Points: par 3 -väylällä ei väyläpistettä', () => {
   assert.equal(holePoints({ s: 3, f: true, g: true }, 3), 2);   // GIR + par
   assert.equal(holePoints({ s: 4, f: true, g: true }, 4), 3);   // väylä + GIR + par
-  assert.equal(holePoints({ s: 1, f: false, g: true }, 3), 5);  // HIO + GIR
+  assert.equal(holePoints({ s: 1, f: false, g: true }, 3), 6);  // HIO + GIR
   assert.equal(holePoints({ s: null, f: true, g: false }, 5), 1); // väylä merkitty, tulos puuttuu
 });
 

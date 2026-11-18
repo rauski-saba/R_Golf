@@ -66,8 +66,8 @@ export function playerSummary(player, holes, tee) {
 
 // ---------- Points-peli ----------
 // Ei tasoituksia. Väyläosuma 1 p (ei par 3 -väylillä), GIR 1 p, ja tuloksesta:
-// hole in one, eagle (tai parempi), birdie ja par.
-export const POINTS = { fairway: 1, green: 1, holeInOne: 4, eagle: 3, birdie: 2, par: 1 };
+// hole in one, albatrossi (tai parempi), eagle, birdie ja par.
+export const POINTS = { fairway: 1, green: 1, holeInOne: 5, albatross: 4, eagle: 3, birdie: 2, par: 1 };
 
 export const hasFairway = par => Number(par) > 3;
 
@@ -77,7 +77,8 @@ export function resultPoints(strokes, par) {
   if (strokes == null || strokes === '' || !Number.isFinite(s) || s < 1) return 0;
   if (s === 1) return POINTS.holeInOne;
   const diff = s - Number(par);
-  if (diff <= -2) return POINTS.eagle;
+  if (diff <= -3) return POINTS.albatross;
+  if (diff === -2) return POINTS.eagle;
   if (diff === -1) return POINTS.birdie;
   if (diff === 0) return POINTS.par;
   return 0;

@@ -24,7 +24,7 @@ function go(hash) { location.hash = hash; }
 function homeView() {
   const rounds = store.rounds();
   return `
-    <header><h1>R_Golf</h1></header>
+    <header><h1>Points</h1></header>
     <div class="actions">
       <a class="btn primary" href="#/round/new">Uusi kierros</a>
       ${syncEnabled() ? '<a class="btn" href="#/join">Liity kierrokseen</a>' : ''}
@@ -264,6 +264,37 @@ function holeView(round, idx) {
     <a class="btn" href="#/round/${round.id}/card">Näytä tuloskortti</a>`;
 }
 
+// Tuloksen merkintä PGA Tourin tapaan: eagle tai parempi kaksoisympyrä, birdie ympyrä, par ilman,
+// bogey neliö, double bogey tai huonompi kaksoisneliö.
+function scoreMark(strokes, par) {
+  const d = strokes - par;
+  return d <= -2 ? 'eagle' : d === -1 ? 'birdie' : d === 0 ? '' : d === 1 ? 'bogey' : 'double';
+}
+
+// Tuloskortin taulukko väleille from–to. 18 väylän kentällä etuysi ja takaysi ovat omina taulukoinaan,
+// jotta kortti mahtuu puhelimen näytölle. Takaysin taulukossa on myös koko kierroksen yhteissumma.
+function cardTable(round, course, points, summaries, from, to, sumLabel, withTotal) {
+  const n = course.holes.length;
+  const holes = course.holes.slice(from, to);
+  const sum = arr => arr.reduce((a, b) => a + (b ?? 0), 0);
+  return `<div class="scroll"><table class="card-table">
+    <thead><tr><th>Väylä</th>${holes.map(h => `<th>${h.number}</th>`).join('')}<th>${sumLabel}</th>${withTotal ? '<th>Yht.</th>' : ''}</tr>
+    <tr class="muted"><td>Par</td>${holes.map(h => `<td>${h.par}</td>`).join('')}<td>${coursePar(holes)}</td>${withTotal ? `<td>${coursePar(course.holes)}</td>` : ''}</tr></thead>
+    <tbody>${round.players.map((p, pi) => {
+      const es = playerEntries(round, p.id, n).slice(from, to);
+      const strokes = es.map(e => e?.s ?? null);
+      const pts = es.map((e, i) => e ? holePoints(e, holes[i].par) : null);
+      return `<tr><th>${esc(p.name)}</th>${holes.map((h, i) => {
+        const s = strokes[i];
+        const cls = s == null ? '' : s < h.par ? 'under' : s > h.par ? 'over' : '';
+        return `<td class="${cls}">${s == null ? '' : `<span class="sc ${scoreMark(s, h.par)}">${s}</span>`}</td>`;
+      }).join('')}<td><strong>${strokes.some(x => x != null) ? sum(strokes) : ''}</strong></td>${withTotal ? `<td><strong>${summaries[pi].gross || ''}</strong></td>` : ''}</tr>
+      ${points ? `<tr class="pts"><td>pist.</td>${pts.map(x => `<td>${x ?? ''}</td>`).join('')}<td>${pts.some(x => x != null) ? sum(pts) : ''}</td>${withTotal ? `<td>${summaries[pi].points}</td>` : ''}</tr>` : ''}`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
+}
+
 const toParText = n => n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`;
 
 function cardView(round) {
@@ -285,20 +316,9 @@ function cardView(round) {
         <td>${s.played ? toParText(s.toPar) : '–'}</td><td>${s.fairways}/${s.fairwayHoles}</td><td>${s.greens}/${n}</td></tr>`).join('')}
       </tbody>
     </table>` : ''}
-    <div class="scroll"><table class="card-table">
-      <thead><tr><th>Väylä</th>${course.holes.map(h => `<th>${h.number}</th>`).join('')}<th>Yht.</th></tr>
-      <tr class="muted"><td>Par</td>${course.holes.map(h => `<td>${h.par}</td>`).join('')}<td>${coursePar(course.holes)}</td></tr></thead>
-      <tbody>${round.players.map((p, pi) => {
-        const es = playerEntries(round, p.id, n);
-        return `<tr><th>${esc(p.name)}</th>${course.holes.map((h, i) => {
-          const s = es[i]?.s;
-          const cls = s == null ? '' : s < h.par ? 'under' : s > h.par ? 'over' : '';
-          return `<td class="${cls}">${s ?? ''}</td>`;
-        }).join('')}<td><strong>${summaries[pi].gross}</strong></td></tr>
-        ${points ? `<tr class="pts"><td>pist.</td>${course.holes.map((h, i) => `<td>${es[i] ? holePoints(es[i], h.par) : ''}</td>`).join('')}<td>${summaries[pi].points}</td></tr>` : ''}`;
-      }).join('')}
-      </tbody>
-    </table></div>
+    ${n > 9
+      ? cardTable(round, course, points, summaries, 0, 9, 'Out', false) + cardTable(round, course, points, summaries, 9, n, 'In', true)
+      : cardTable(round, course, points, summaries, 0, n, 'Yht.', false)}
     ${!points ? `
     <table class="summary">
       <thead><tr><th>Pelaaja</th><th>Pelitas.</th><th>Lyönnit</th><th>Netto</th><th>Pisteet</th></tr></thead>

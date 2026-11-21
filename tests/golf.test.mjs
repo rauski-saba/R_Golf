@@ -89,7 +89,7 @@ import { PRESET_COURSES } from '../js/presets.js';
 import { coursePar } from '../js/golf.js';
 
 test('valmiiden kenttien tiedot ovat eheät', () => {
-  const expectedPar = { 'preset-el-kantaoui-sea': 73, 'preset-el-kantaoui-panorama': 72 };
+  const expectedPar = { 'preset-el-kantaoui-sea': 73, 'preset-el-kantaoui-panorama': 72, 'preset-linna-golf': 72, 'preset-tuusulan-golfklubi': 71 };
   for (const c of PRESET_COURSES) {
     assert.equal(c.holes.length, 18, c.name);
     assert.equal(coursePar(c.holes), expectedPar[c.id], c.name);

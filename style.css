@@ -134,3 +134,19 @@ th, td { padding: 6px; text-align: center; border-bottom: 1px solid var(--border
 .sync { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
 .code { letter-spacing: .12em; font-size: 1.1rem; }
 .offline { color: var(--danger); }
+
+/* Tuloskortti: etu- ja takaysi omina taulukoinaan */
+.card-table { margin-top: 12px; font-size: .9rem; }
+.card-table th, .card-table td { padding: 5px 1px; }
+.card-table th:first-child, .card-table td:first-child { padding-right: 4px; }
+
+/* Tulosmerkinnät: ympyrä = alle parin, neliö = yli parin, kaksinkertainen = kaksi tai enemmän */
+.sc {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.6em; height: 1.6em; box-sizing: border-box;
+  border: 1.5px solid transparent; line-height: 1;
+}
+.sc.birdie { border-color: currentColor; border-radius: 50%; }
+.sc.eagle { border: 3.5px double currentColor; border-radius: 50%; }
+.sc.bogey { border-color: currentColor; }
+.sc.double { border: 3.5px double currentColor; }

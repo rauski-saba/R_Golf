@@ -1,5 +1,5 @@
 // Välimuisti, jotta sovellus aukeaa kentällä myös heikolla yhteydellä.
-const CACHE = 'rgolf-v5';
+const CACHE = 'rgolf-v7';
 const FILES = ['./', 'index.html', 'style.css', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png',
   'js/app.js', 'js/golf.js', 'js/osm.js', 'js/storage.js', 'js/presets.js',
   'js/round.js', 'js/sync.js', 'js/config.js'];

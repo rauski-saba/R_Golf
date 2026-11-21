@@ -22,7 +22,7 @@ Kuka tahansa voi kirjata kenen tahansa tuloksen, ja flightin kirjaaja voi rajata
 ## Mitä se tekee
 
 - Hakee Suomen, Turkin ja Tunisian golfkentät väylätietoineen (par, väylähcp) OpenStreetMapista.
-- El Kantaoui Golfin (Tunisia) Sea- ja Panorama-kentät ovat valmiina tiitietoineen, joten ne toimivat ilman verkkoyhteyttä.
+- Linna Golf, Tuusulan Golfklubi sekä El Kantaoui Golfin (Tunisia) Sea- ja Panorama-kentät ovat valmiina tiitietoineen, joten ne toimivat ilman verkkoyhteyttä.
 - Kentän voi lisätä tai korjata käsin, samoin tiit (CR ja slope).
 - Kierroksella syötetään lyönnit väylä kerrallaan useammalle pelaajalle.
 - Pelimuodot: Points (ilman tasoituksia) ja pistebogey (WHS-pelitasoitus, tasoituslyönnit väylittäin).
